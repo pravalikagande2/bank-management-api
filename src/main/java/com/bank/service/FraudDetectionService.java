@@ -1,45 +1,25 @@
-// File: src/main/java/com/bank/service/FraudDetectionService.java
-
 package com.bank.service;
 
+import com.bank.dao.TransactionDAO;
 import com.bank.model.Account;
 import com.bank.model.Transaction;
-import com.bank.repository.TransactionRepository;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.List;
 
-/**
- * Service responsible for detecting potentially fraudulent transactions.
- * The @Service annotation marks this as a Spring service bean.
- */
-@Service
 public class FraudDetectionService {
-
-    // --- Configuration for Fraud Rules ---
     private static final int FREQUENCY_TRANSACTION_LIMIT = 10;
     private static final long FREQUENCY_WINDOW_MINUTES = 5;
     private static final BigDecimal AMOUNT_MULTIPLIER_LIMIT = new BigDecimal("5.0");
 
-    private final TransactionRepository transactionRepository;
+    private final TransactionDAO transactionDAO;
 
-    /**
-     * Using constructor injection to get the TransactionRepository bean from Spring.
-     * This is the recommended way to inject dependencies.
-     * @param transactionRepository The repository for transaction data access.
-     */
-    @Autowired
-    public FraudDetectionService(TransactionRepository transactionRepository) {
-        this.transactionRepository = transactionRepository;
+    public FraudDetectionService() {
+        this.transactionDAO = new TransactionDAO();
     }
 
-    /**
-     * Checks a transaction against a set of fraud rules.
-     */
     public Transaction checkForFraud(Account account, Transaction newTransaction) {
         if (isTransactionFrequencyTooHigh(account.getAccountId())) {
             newTransaction.setFlagged(true);
@@ -56,13 +36,10 @@ public class FraudDetectionService {
         return newTransaction;
     }
 
-    private boolean isTransactionFrequencyTooHigh(Integer accountId) {
+    private boolean isTransactionFrequencyTooHigh(int accountId) {
         Timestamp windowStart = Timestamp.from(Instant.now().minusSeconds(FREQUENCY_WINDOW_MINUTES * 60));
-
-        // Use the new repository method. It's much cleaner!
-        List<Transaction> recentTransactions = transactionRepository.findByAccountIdAndTransactionTimeGreaterThanEqual(accountId, windowStart);
-
-        System.out.println("Found " + recentTransactions.size() + " transactions in the last " + FREQUENCY_WINDOW_MINUTES + " minutes for account " + accountId);
+        List<Transaction> recentTransactions = transactionDAO.findTransactionsByAccountIdSince(accountId, windowStart);
+        System.out.println("Found " + recentTransactions.size() + " transactions in the last " + FREQUENCY_WINDOW_MINUTES + " minutes.");
         return recentTransactions.size() >= FREQUENCY_TRANSACTION_LIMIT;
     }
 

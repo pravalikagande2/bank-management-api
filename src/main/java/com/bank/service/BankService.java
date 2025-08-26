@@ -1,54 +1,42 @@
-// File: src/main/java/com/bank/service/BankService.java
-
 package com.bank.service;
 
+import com.bank.dao.AccountDAO;
+import com.bank.dao.TransactionDAO;
 import com.bank.exception.InsufficientFundsException;
 import com.bank.model.Account;
 import com.bank.model.Transaction;
-import com.bank.repository.AccountRepository;
-import com.bank.repository.TransactionRepository;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
-import java.util.List;
 import java.util.Optional;
+import java.util.List;
 
-/**
- * The main service class for handling all banking business logic.
- * It uses Spring's dependency injection and transaction management.
- */
-@Service
 public class BankService {
-
-    private final AccountRepository accountRepository;
-    private final TransactionRepository transactionRepository;
+    private final AccountDAO accountDAO;
+    private final TransactionDAO transactionDAO;
     private final FraudDetectionService fraudDetectionService;
 
-    @Autowired
-    public BankService(AccountRepository accountRepository, TransactionRepository transactionRepository, FraudDetectionService fraudDetectionService) {
-        this.accountRepository = accountRepository;
-        this.transactionRepository = transactionRepository;
-        this.fraudDetectionService = fraudDetectionService;
+    public BankService() {
+        this.accountDAO = new AccountDAO();
+        this.transactionDAO = new TransactionDAO();
+        this.fraudDetectionService = new FraudDetectionService();
     }
 
     public Account createAccount(String customerName, String accountType, BigDecimal initialDeposit) {
         Account newAccount = new Account(customerName, accountType, initialDeposit);
-        // The save() method handles both creating new entities and updating existing ones.
-        return accountRepository.save(newAccount);
+        int accountId = accountDAO.createAccount(newAccount);
+        newAccount.setAccountId(accountId);
+        return newAccount;
     }
 
-    /**
-     * The @Transactional annotation ensures that this entire method runs within a single database transaction.
-     * If any part of it fails, all database changes will be automatically rolled back.
-     */
-    @Transactional
-    public Account deposit(int accountId, BigDecimal amount) {
-        Account account = accountRepository.findById(accountId)
-                .orElseThrow(() -> new IllegalStateException("Account not found with ID " + accountId));
+    public Optional<Account> deposit(int accountId, BigDecimal amount) {
+        Optional<Account> accountOpt = accountDAO.findAccountById(accountId);
+        if (accountOpt.isEmpty()) {
+            System.err.println("Deposit failed: Account not found with ID " + accountId);
+            return Optional.empty();
+        }
 
+        Account account = accountOpt.get();
         Transaction transaction = new Transaction(accountId, "DEPOSIT", amount);
         transaction = fraudDetectionService.checkForFraud(account, transaction);
 
@@ -58,15 +46,21 @@ public class BankService {
             updateAverageTransactionAmount(account, amount);
         }
 
-        transactionRepository.save(transaction);
-        return accountRepository.save(account);
+        accountDAO.updateAccount(account);
+        transactionDAO.createTransaction(transaction);
+
+        System.out.println("Deposit successful for account " + accountId);
+        return Optional.of(account);
     }
 
-    @Transactional
-    public Account withdraw(int accountId, BigDecimal amount) throws InsufficientFundsException {
-        Account account = accountRepository.findById(accountId)
-                .orElseThrow(() -> new IllegalStateException("Account not found with ID " + accountId));
+    public Optional<Account> withdraw(int accountId, BigDecimal amount) throws InsufficientFundsException {
+        Optional<Account> accountOpt = accountDAO.findAccountById(accountId);
+        if (accountOpt.isEmpty()) {
+            System.err.println("Withdrawal failed: Account not found with ID " + accountId);
+            return Optional.empty();
+        }
 
+        Account account = accountOpt.get();
         if (account.getBalance().compareTo(amount) < 0) {
             throw new InsufficientFundsException("Insufficient funds for withdrawal. Current balance: " + account.getBalance());
         }
@@ -80,29 +74,41 @@ public class BankService {
             updateAverageTransactionAmount(account, amount);
         }
 
-        transactionRepository.save(transaction);
-        return accountRepository.save(account);
+        accountDAO.updateAccount(account);
+        transactionDAO.createTransaction(transaction);
+
+        System.out.println("Withdrawal successful for account " + accountId);
+        return Optional.of(account);
     }
 
-    @Transactional
     public void transfer(int fromAccountId, int toAccountId, BigDecimal amount) throws InsufficientFundsException {
-        // Since withdraw and deposit are already @Transactional, calling them will propagate the transaction.
-        // We perform the withdrawal first. If it fails (e.g., insufficient funds), an exception is thrown
-        // and the transaction is rolled back, so the deposit never even happens.
+        Optional<Account> fromAccountOpt = accountDAO.findAccountById(fromAccountId);
+        Optional<Account> toAccountOpt = accountDAO.findAccountById(toAccountId);
+
+        if (fromAccountOpt.isEmpty() || toAccountOpt.isEmpty()) {
+            System.err.println("Transfer failed: One or both accounts not found.");
+            return;
+        }
+
         withdraw(fromAccountId, amount);
         deposit(toAccountId, amount);
+
+        System.out.println("Transfer of " + amount + " from account " + fromAccountId + " to " + toAccountId + " successful.");
     }
 
     public Optional<Account> getAccount(int accountId) {
-        return accountRepository.findById(accountId);
+        return accountDAO.findAccountById(accountId);
     }
 
     public List<Transaction> getTransactionHistory(int accountId) {
-        return transactionRepository.findByAccountIdOrderByTransactionTimeDesc(accountId);
+        return transactionDAO.findTransactionsByAccountId(accountId);
     }
 
     private void updateAverageTransactionAmount(Account account, BigDecimal newAmount) {
-        long transactionCount = transactionRepository.countByAccountIdAndIsFlagged(account.getAccountId(), false);
+        long transactionCount = transactionDAO.findTransactionsByAccountId(account.getAccountId())
+                .stream()
+                .filter(t -> !t.isFlagged())
+                .count();
 
         BigDecimal currentTotal = account.getAvgTransactionAmount().multiply(new BigDecimal(transactionCount));
         BigDecimal newTotal = currentTotal.add(newAmount);
