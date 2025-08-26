@@ -1,80 +1,84 @@
-Bank Management System API with Fraud Detection & CI/CD
-This project is a full-featured, enterprise-grade Bank Management System built with Java and Spring Boot. It provides a complete RESTful API for standard banking operations and includes a sophisticated fraud detection module. The entire project is containerized with Docker and features a complete CI/CD pipeline managed by Jenkins.
+Bank Management System (CLI)
+This project is a command-line based Bank Management System built with Java. It handles standard banking operations like account creation, deposits, and withdrawals, and features a built-in fraud detection module to identify suspicious transactions based on unusual patterns.
 
 Features
-Core Banking API (/api/accounts)
-POST /: Create a new customer account.
+Core Banking
+Account Management: Create new customer accounts.
 
-GET /{id}: Retrieve account details and balance.
+View Details: Check account balance and information.
 
-POST /{id}/deposit: Deposit funds into an account.
+Transactions: Deposit, withdraw, and transfer funds between accounts.
 
-POST /{id}/withdraw: Withdraw funds from an account.
-
-POST /transfer: Transfer funds between two accounts.
-
-GET /{id}/transactions: View a complete transaction history for an account.
+History: View a complete transaction history for any account.
 
 Fraud Detection Module
-The system automatically checks every transaction for the following suspicious patterns:
+The system automatically checks every transaction for the following patterns:
 
-High Transaction Frequency: Flags accounts with an abnormally high number of transactions within a short, 5-minute sliding window.
+High Transaction Frequency: Flags accounts with too many transactions in a short time frame (e.g., more than 10 transactions in 5 minutes) using a Sliding Window algorithm.
 
-Anomalous Transaction Amount: Flags transactions that are significantly larger (5x) than the user's historical average transaction amount.
+Anomalous Transaction Amount: Flags transactions that are significantly larger than the user's historical average.
 
-Technology Stack & Architecture
-This project is built using a modern, industry-standard technology stack.
+Technology Stack
+Language: Java
 
-Backend: Java 11, Spring Boot
+Database: MySQL
 
-API: Spring Web (RESTful API)
+Connectivity: JDBC (Java Database Connectivity)
 
-Database: Spring Data JPA, Hibernate, MySQL
+Build Tool: Maven
 
-Testing:
+Database Schema
+You will need two tables in your MySQL database.
 
-Unit Tests: JUnit 5, Mockito
+Accounts Table
 
-Integration Tests: Spring Boot Test, Testcontainers (with MySQL)
+CREATE TABLE Accounts (
+accountId INT PRIMARY KEY AUTO_INCREMENT,
+customerName VARCHAR(255) NOT NULL,
+accountType VARCHAR(50),
+balance DECIMAL(15, 2) NOT NULL,
+avgTransactionAmount DECIMAL(15, 2) DEFAULT 0.00,
+createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
 
-Containerization: Docker
+Transactions Table
 
-CI/CD: Jenkins, Git, GitHub
+CREATE TABLE Transactions (
+transactionId INT PRIMARY KEY AUTO_INCREMENT,
+accountId INT,
+transactionType VARCHAR(50) NOT NULL,
+amount DECIMAL(15, 2) NOT NULL,
+isFlagged BOOLEAN DEFAULT FALSE,
+reasonForFlag VARCHAR(255),
+transactionTime TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+FOREIGN KEY (accountId) REFERENCES Accounts(accountId)
+);
 
-CI/CD Pipeline (Jenkins)
-The project includes a complete Continuous Integration and Continuous Deployment (CI/CD) pipeline configured in a Jenkinsfile. The pipeline automates the following stages on every git push to the main branch:
+How to Set Up and Run
+Clone the Repository:
 
-Checkout: Securely checks out the latest source code from GitHub using SSH keys.
+git clone <your-repository-url>
 
-Build: Compiles the Java code and packages the application into a .jar file using Maven.
+Set Up the Database:
 
-Test: Runs all unit and integration tests to ensure code quality and prevent regressions.
+Make sure you have a MySQL server running.
 
-Deploy:
+Connect to your MySQL server and run the following command:
 
-Builds a new Docker image from the Dockerfile.
+CREATE DATABASE bank_system;
 
-Stops and removes the old running application container.
+Configure Database Connection:
 
-Runs the new Docker image as a container, deploying the latest version of the application.
+Open the project in your IDE (like IntelliJ).
 
-How to Run Locally
-Using Docker (Recommended)
-Ensure Docker Desktop is running.
+Navigate to the file: src/main/java/com/bank/dao/DatabaseConnector.java.
 
-Build the image: docker build -t bank-management-api .
+Update the USER and PASSWORD fields with your own MySQL credentials.
 
-Run the container (ensure your local MySQL is running):
+Run the Application:
 
-docker run -d --name bank-api-container -p 8088:8088 \
--e "SPRING_DATASOURCE_URL=jdbc:mysql://host.docker.internal:3306/bank_system" \
--e "SPRING_DATASOURCE_USERNAME=root" \
--e "SPRING_DATASOURCE_PASSWORD=your_password" \
-bank-management-api
+Find the Main.java file in src/main/java/com/bank/.
 
-Using Maven
-Ensure a local MySQL server is running.
+Right-click on the file and select "Run 'Main.main()'".
 
-Update the database credentials in src/main/resources/application.properties.
-
-Run the application: mvn spring-boot:run
+The application will start, and you can interact with it through the menu in your IDE's console.
